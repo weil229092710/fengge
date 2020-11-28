@@ -609,35 +609,7 @@ class MySqlSink2() extends RichSinkFunction[Iterable[JSONObject]] with Constants
             inserWorkID.addBatch()
             insertStmt.addBatch()
           }
-//          if ((table == "xh_cloudwork_parts.work" || table == "xh_cloudwork_exam.teacherExam") && sql_type == "u") {
-//
-//            val handin = Utils.null20(value.getString("handin"))
-//            if (handin != 0) {
-//              val work_id = value.getString("id")
-//              var proof = workStatusMap.getOrElse(work_id, 99)
-//              if (proof == 99) {
-//                val quproofInfo = "select proof from all_yunzuoye_work where work_id='" + work_id + "'"
-//                val results1: ResultSet = MysqlUtils2.select(quproofInfo)
-//                while (results1.next()) {
-//                  proof = results1.getInt(1)
-//                }
-//              }
-//              if (proof == 0) check_num = 1
-//              inserHandInNum.setString(1, work_id)
-//              inserHandInNum.setInt(2, handin)
-//              inserHandInNum.setInt(3, check_num)
-//              inserHandInNum.setString(4, value.getString("upTime"))
-//              inserHandInNum.setInt(5, value.getString("upTime").split(" ")(1).split(":")(0).toInt)
-//              inserHandInNum.setString(6, value.getString("upTime").split(" ")(0))
-//              inserHandInNum.setInt(7, handin)
-//              inserHandInNum.setInt(8, check_num)
-//              inserHandInNum.setString(9, value.getString("upTime"))
-//              check_num = 0
-//              inserHandInNum.addBatch()
-//            }
-//          }
-
-                    if ((table == "xh_cloudwork_parts.work" || table == "xh_cloudwork_exam.teacherExam") && sql_type == "u") {
+          if ((table == "xh_cloudwork_parts.work" || table == "xh_cloudwork_exam.teacherExam") && sql_type == "u") {
 
                       val handin = Utils.null20(value.getString("handin"))
                       if (handin != 0) {
@@ -881,7 +853,6 @@ class MySqlSink2() extends RichSinkFunction[Iterable[JSONObject]] with Constants
       inserWorkID.close()
       inserHandInNum.close()
       updatePreCount.close()
-      inserHandInCount.close()
       conn.close()
     //   println("云mysql关闭成功")
     } catch {

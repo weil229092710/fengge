@@ -222,7 +222,7 @@ class MySqlSink7() extends RichSinkFunction[Iterable[JSONObject]] with Constants
               updateMax.execute()
               //conn.commit()
             }
-            if(status==1&&online_count>=(pre_count*0.2).toInt){
+            if(status==1&&online_count>=(pre_count*0.3).toInt){
               status=2
               status1to2 = new SimpleDateFormat("yyyy-MM-dd HH:mm:ss").format(new Date)
               //将未上课状态改为上课状态
