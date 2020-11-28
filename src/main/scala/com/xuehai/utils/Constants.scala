@@ -27,7 +27,7 @@ trait Constants {
 	val groupId = PropertiesUtil.getKey("kafkaGroupId")
 	val props = new Properties()
 	props.put("bootstrap.servers", brokerList)
-	props.put("auto.offset.reset", "earliest")//earliest  latest
+	props.put("auto.offset.reset", PropertiesUtil.getKey("offset"))//earliest  latest
 	props.put("group.id", groupId)
 	props.put("enable.auto.commit", "false")
 	props.put("auto.commit.interval.ms", "1000")

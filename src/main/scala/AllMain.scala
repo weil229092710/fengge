@@ -176,11 +176,6 @@ object AllMain extends Constants{
                    val array1: JSONArray = answerarray.get(b).asInstanceOf[JSONArray]
                    num= array1.get(2).asInstanceOf[JSONObject].getString("Value").toInt
 
-//                   if(emptyMap.contains(num))
-//                     emptyMap += (num -> (emptyMap(num)+1))
-//                   else
-//                     emptyMap+= (num -> 1)
-
                    if(obj.containsKey(num.toString))
                      obj.put(num.toString,obj.getInteger(num.toString).toInt+1)
                    else
@@ -402,7 +397,7 @@ object AllMain extends Constants{
            case e: Exception => {
              //Utils.dingDingRobot("all", "错题本实时数据异常：%s, %s".format(e, x))
              log.error("峰哥实时数据异常：%s, \\r\\n %s".format(e, x))
-             println("愿数据问题"+e)
+             println("原数据问题"+e)
              JSON.parseObject("{}")
            }
          }
@@ -411,7 +406,7 @@ object AllMain extends Constants{
        .filter(_.size()>4)
 
        .assignAscendingTimestamps(_.getLong("updateTime")*1000)
-       .timeWindowAll(org.apache.flink.streaming.api.windowing.time.Time.seconds(1))
+       .timeWindowAll(org.apache.flink.streaming.api.windowing.time.Time.seconds(5))
 
       .apply(new ByWindow())
       .addSink(new  MySqlSink2())
@@ -446,6 +441,7 @@ class MySqlSink2() extends RichSinkFunction[Iterable[JSONObject]] with Constants
   var inserWorkID: PreparedStatement = _
   var inserHandInNum: PreparedStatement = _
   var updatePreCount: PreparedStatement = _
+  var inserHandInCount : PreparedStatement = _
 
   var result: ResultSet = null
   var updateStmt: PreparedStatement = _
@@ -478,7 +474,7 @@ class MySqlSink2() extends RichSinkFunction[Iterable[JSONObject]] with Constants
   // 初始化，创建连接和预编译语句
   override def open(parameters: Configuration): Unit = {
     super.open(parameters)
-    try {
+
       //Class.forName("com.mysql.jdbc.Driver")
       //conn = DriverManager.getConnection(Url, User, Password)
       import org.apache.commons.dbcp2.BasicDataSource
@@ -494,14 +490,17 @@ class MySqlSink2() extends RichSinkFunction[Iterable[JSONObject]] with Constants
       inserWorkID=conn.prepareStatement("INSERT INTO all_yunzuoye_work (\n\twork_id,\n\tproof,\n\tuptime\n ,handinnum ,user_id,topic_num,upto_time)\nVALUES\n\t(?, ?,?,?,?,?,?) ON DUPLICATE KEY UPDATE uptime=?")
       inserHandInNum=conn.prepareStatement("    iNSERT INTO all_yunzuoye_handin (\n work_id, handin_num,\n        check_num,\n        uptime,\n        cur_hour\n        ,cur_day)\n      VALUES\n      (?, ?, ?, ?, ?,?) ON DUPLICATE KEY UPDATE handin_num = ?,\n      check_num = check_num + ?,\n      uptime=?")
       updatePreCount=conn.prepareStatement(" UPDATE all_yunketang_real set pre_count=? where id =?")
-      //教师对应科目信息将数据放在内存中
-      val qusubjectInfo = "select teacher_id,subject_id from fact_teacher_info"
-      val results1: ResultSet = MysqlUtils1.select(qusubjectInfo)
-      while (results1.next()) {
-        val teacher_id = results1.getInt(1)
-        val subject_id = results1.getInt(2)
-        teacherInfoMap+= (teacher_id ->subject_id)
-      }
+     inserHandInCount=conn.prepareStatement("iNSERT INTO all_hand_num (\n        handin_num,\n       \n        uptime,\n        cur_hour\n        ,cur_day)\n      VALUES\n      (?, ?, ?, ?) ON DUPLICATE KEY UPDATE handin_num = handin_num+1,\n      uptime=?")
+
+    //教师对应科目信息将数据放在内存中
+    try {
+//      val qusubjectInfo = "select teacher_id,subject_id from fact_teacher_info"
+//      val results1: ResultSet = MysqlUtils1.select(qusubjectInfo)
+//      while (results1.next()) {
+//        val teacher_id = results1.getInt(1)
+//        val subject_id = results1.getInt(2)
+//        teacherInfoMap+= (teacher_id ->subject_id)
+//      }
 
       val proofStatusInfo = "select work_id,proof from all_yunzuoye_work"
       val results2: ResultSet = MysqlUtils2.select(proofStatusInfo)
@@ -510,9 +509,15 @@ class MySqlSink2() extends RichSinkFunction[Iterable[JSONObject]] with Constants
         val proof= results2.getInt(2)
         workStatusMap+= (work_id ->proof)
       }
+    }
+    catch {
+      case e: Exception => {
+        println("open 函数将数据放到内存中失败"+e)
+      }
+    }
 
 
-
+    try {
       val quUserInfoSql = "select a.iUserId,a.iSchoolId,a.sUserName,a.iUserType,b.sSchoolName,b.scountyname,b.sProvinceName,b.sCityName  from \nxh_user_service.XHSys_User a\nLEFT JOIN \nxh_user_service.XHSchool_Info b \non  a.iSchoolId=b.ischoolid and b.bdelete=0 and b.istatus in (1,2)"
 
       val results: ResultSet = MysqlUtils.select(quUserInfoSql)
@@ -534,7 +539,7 @@ class MySqlSink2() extends RichSinkFunction[Iterable[JSONObject]] with Constants
     }
     catch {
       case e: Exception => {
-        println("云mysql连接失败"+e)
+        println(new SimpleDateFormat("yyyy-MM-dd HH:mm:ss").format(new Date)+"open函数用户信息出现问题"+e)
       }
     }
   }
@@ -543,249 +548,297 @@ class MySqlSink2() extends RichSinkFunction[Iterable[JSONObject]] with Constants
 
   // 调用连接，执行sql
   override def invoke(values: Iterable[JSONObject], context: SinkFunction.Context[_]): Unit = {
-    try{
+
       for(value <-values) {
-         table=value.getString("table")
-        sql_type=value.getString("sql_type")
-        if ((table == "xh_cloudwork_parts.work" || table=="xh_cloudwork_exam.teacherExam")&&sql_type=="i"){
-          insertStmt.setInt(1, value.getInteger("handInNum"))
-          insertStmt.setInt(2, value.getInteger("handInNum") * value.getInteger("topicNum"))
+        try {
+          table = value.getString("table")
+          sql_type = value.getString("sql_type")
+          if ((table == "xh_cloudwork_parts.work" || table == "xh_cloudwork_exam.teacherExam") && sql_type == "i") {
+            insertStmt.setInt(1, value.getInteger("handInNum"))
+            insertStmt.setInt(2, value.getInteger("handInNum") * value.getInteger("topicNum"))
 
 
-          val subject_id=value.getInteger("subject")
-          val subject_name=subjectMap.getOrElse(subject_id,"科目错误")
-          val userid=value.getInteger("teacherId")
+            val subject_id = value.getInteger("subject")
+            val subject_name = subjectMap.getOrElse(subject_id, "")
+            val userid = value.getInteger("teacherId")
 
-          val userinfo=emptyMap.getOrElse(userid,"信息错误")
-          if(userinfo!="信息错误") {
-            user_id = userinfo.split("#")(0).toInt
-            school_id = userinfo.split("#")(1).toInt
-            school_name = userinfo.split("#")(2)
-            province = userinfo.split("#")(3)
-            city_name = userinfo.split("#")(4)
-          }
-          if(userinfo=="信息错误"){
-
-            val quUserInfoSql = "select a.iUserId,a.iSchoolId,a.sUserName,a.iUserType,b.sSchoolName,b.scountyname,b.sProvinceName,b.sCityName  from \n(select * from xh_user_service.XHSys_User where  iUserId="+user_id+") a \nLEFT JOIN \nxh_user_service.XHSchool_Info b \non  a.iSchoolId=b.ischoolid and b.bdelete=0 and b.istatus in (1,2)"
-            val results: ResultSet = MysqlUtils.select(quUserInfoSql)
-            while (results.next()) {
-              user_id =results.getInt(1)
-              school_id=results.getInt(2)
-              //user_name=results.getString(3)
-              //user_type=results.getInt(4)
-              school_name=results.getString(5)
-              //city=results.getString(6)
-              province=results.getString(7)
-              city_name=results.getString(8)
+            val userinfo = emptyMap.getOrElse(userid, "信息错误")
+            if (userinfo != "信息错误") {
+              user_id = userinfo.split("#")(0).toInt
+              school_id = userinfo.split("#")(1).toInt
+              school_name = userinfo.split("#")(2)
+              province = userinfo.split("#")(3)
+              city_name = userinfo.split("#")(4)
             }
-          }
-          insertStmt.setInt(3, value.getInteger("subject"))
-          insertStmt.setString(4, value.getString("upTime"))
-          insertStmt.setInt(5, value.getString("upTime").split(" ")(1).split(":")(0).toInt)
-          insertStmt.setString(6, value.getString("upTime").split(" ")(0))
-          insertStmt.setString(7, subject_name)
-          insertStmt.setInt(8, school_id)
-          insertStmt.setString(9, school_name)
-          insertStmt.setString(10, province)
-          insertStmt.setString(11, city_name)
-          insertStmt.setInt(12, value.getInteger("handInNum"))
-          insertStmt.setInt(13, value.getInteger("handInNum") * value.getInteger("topicNum"))
-          insertStmt.setString(14, value.getString("upTime"))
+            if (userinfo == "信息错误") {
 
-          inserWorkID.setString(1,value.getString("id"))
-          inserWorkID.setInt(2,value.getInteger("proofreadState"))
-          inserWorkID.setString(3, value.getString("upTime"))
-          inserWorkID.setInt(4, value.getInteger("handInNum"))
-          inserWorkID.setInt(5,userid)
-          inserWorkID.setInt(6,value.getInteger("topicNum"))
-          inserWorkID.setString(7,value.getString("upto_time"))
-          inserWorkID.setString(8, value.getString("upTime"))
-          inserWorkID.addBatch()
-          insertStmt.addBatch()
-        }
-        if ((table == "xh_cloudwork_parts.work" || table=="xh_cloudwork_exam.teacherExam")&&sql_type=="u"){
-
-        val handin=Utils.null20(value.getString("handin"))
-          if(handin!=0) {
-            val work_id = value.getString("id")
-            var proof = workStatusMap.getOrElse(work_id, 99)
-            if (proof == 99) {
-              val quproofInfo = "select proof from all_yunzuoye_work where work_id='" + work_id + "'"
-              val results1: ResultSet = MysqlUtils2.select(quproofInfo)
-              while (results1.next()) {
-                proof = results1.getInt(1)
+              val quUserInfoSql = "select a.iUserId,a.iSchoolId,a.sUserName,a.iUserType,b.sSchoolName,b.scountyname,b.sProvinceName,b.sCityName  from \n(select * from xh_user_service.XHSys_User where  iUserId=" + user_id + ") a \nLEFT JOIN \nxh_user_service.XHSchool_Info b \non  a.iSchoolId=b.ischoolid and b.bdelete=0 and b.istatus in (1,2)"
+              val results: ResultSet = MysqlUtils.select(quUserInfoSql)
+              while (results.next()) {
+                user_id = results.getInt(1)
+                school_id = results.getInt(2)
+                //user_name=results.getString(3)
+                //user_type=results.getInt(4)
+                school_name = results.getString(5)
+                //city=results.getString(6)
+                province = results.getString(7)
+                city_name = results.getString(8)
               }
             }
-            if (proof == 0) check_num = 1
-            inserHandInNum.setString(1, work_id)
-            inserHandInNum.setInt(2, handin)
-            inserHandInNum.setInt(3, check_num)
-            inserHandInNum.setString(4, value.getString("upTime"))
-            inserHandInNum.setInt(5, value.getString("upTime").split(" ")(1).split(":")(0).toInt)
-            inserHandInNum.setString(6, value.getString("upTime").split(" ")(0))
-            inserHandInNum.setInt(7, handin)
-            inserHandInNum.setInt(8, check_num)
-            inserHandInNum.setString(9, value.getString("upTime"))
-            check_num = 0
-            inserHandInNum.addBatch()
-          }
-        }
-        if ((table == "xh_cloudwork_parts.studentWork" || table=="xh_cloudwork_exam.studentExam")&&sql_type=="uu") {
-          workFlag= Utils.null2kong(value.getString("workFlag"))
+            insertStmt.setInt(3, value.getInteger("subject"))
+            insertStmt.setString(4, value.getString("upTime"))
+            insertStmt.setInt(5, value.getString("upTime").split(" ")(1).split(":")(0).toInt)
+            insertStmt.setString(6, value.getString("upTime").split(" ")(0))
+            insertStmt.setString(7, subject_name)
+            insertStmt.setInt(8, school_id)
+            insertStmt.setString(9, school_name)
+            insertStmt.setString(10, province)
+            insertStmt.setString(11, city_name)
+            insertStmt.setInt(12, value.getInteger("handInNum"))
+            insertStmt.setInt(13, value.getInteger("handInNum") * value.getInteger("topicNum"))
+            insertStmt.setString(14, value.getString("upTime"))
 
-          if(workFlag=="1"||workFlag=="2") {
-            workFlag124 = Utils.null20(value.getInteger("1")) + Utils.null20(value.getInteger("2")) + Utils.null20(value.getInteger("4")) + Utils.null20(value.getInteger("10"))
+            inserWorkID.setString(1, value.getString("id"))
+            inserWorkID.setInt(2, value.getInteger("proofreadState"))
+            inserWorkID.setString(3, value.getString("upTime"))
+            inserWorkID.setInt(4, value.getInteger("handInNum"))
+            inserWorkID.setInt(5, userid)
+            inserWorkID.setInt(6, value.getInteger("topicNum"))
+            inserWorkID.setString(7, value.getString("upto_time"))
+            inserWorkID.setString(8, value.getString("upTime"))
+            inserWorkID.addBatch()
+            insertStmt.addBatch()
           }
-          if(workFlag=="4") {
-            workFlag124 = Utils.null20(value.getInteger("1")) + Utils.null20(value.getInteger("2")) + Utils.null20(value.getInteger("3")) + Utils.null20(value.getInteger("6"))
-          }
-          if (workFlag124!=0) {
-            Map+=(value.getString("upTime")->"4")
-            insertAutoCorrect.setInt(1, workFlag124)
-            insertAutoCorrect.setString(2, value.getString("upTime"))
-            insertAutoCorrect.setString(3, value.getString("upTime").split(" ")(0))
-            insertAutoCorrect.setInt(4, value.getString("upTime").split(" ")(1).split(":")(0).toInt)
-            insertAutoCorrect.setInt(5, workFlag124)
-            insertAutoCorrect.setString(6, value.getString("upTime"))
-            insertAutoCorrect.addBatch()
-          }
-        }
-        if (table == "xh_king.game"&&Utils.null20(value.getInteger("isHomeWork"))==1) {
-          val timeConsume=Utils.null20(value.getInteger("timeConsuming"))
-          val count=Utils.null20(value.getInteger("count"))
-          val subject_id=Utils.null20(value.getInteger("subjectId"))
-          val subject_name=subjectMap.getOrElse(subject_id,"科目错误")
-          val userid=value.getInteger("studentId")
-          val userinfo=emptyMap.getOrElse(userid,"信息错误")
-          if(userinfo!="信息错误") {
-            user_id = userinfo.split("#")(0).toInt
-            school_id = userinfo.split("#")(1).toInt
-            school_name = userinfo.split("#")(2)
-            province = userinfo.split("#")(3)
-            city_name = userinfo.split("#")(4)
-          }
-          if(userinfo=="信息错误"){
-            val quUserInfoSql = "select a.iUserId,a.iSchoolId,a.sUserName,a.iUserType,b.sSchoolName,b.scountyname,b.sProvinceName,b.sCityName  from \n(select * from xh_user_service.XHSys_User where  iUserId="+user_id+") a \nLEFT JOIN \nxh_user_service.XHSchool_Info b \non  a.iSchoolId=b.ischoolid and b.bdelete=0 and b.istatus in (1,2)"
+//          if ((table == "xh_cloudwork_parts.work" || table == "xh_cloudwork_exam.teacherExam") && sql_type == "u") {
+//
+//            val handin = Utils.null20(value.getString("handin"))
+//            if (handin != 0) {
+//              val work_id = value.getString("id")
+//              var proof = workStatusMap.getOrElse(work_id, 99)
+//              if (proof == 99) {
+//                val quproofInfo = "select proof from all_yunzuoye_work where work_id='" + work_id + "'"
+//                val results1: ResultSet = MysqlUtils2.select(quproofInfo)
+//                while (results1.next()) {
+//                  proof = results1.getInt(1)
+//                }
+//              }
+//              if (proof == 0) check_num = 1
+//              inserHandInNum.setString(1, work_id)
+//              inserHandInNum.setInt(2, handin)
+//              inserHandInNum.setInt(3, check_num)
+//              inserHandInNum.setString(4, value.getString("upTime"))
+//              inserHandInNum.setInt(5, value.getString("upTime").split(" ")(1).split(":")(0).toInt)
+//              inserHandInNum.setString(6, value.getString("upTime").split(" ")(0))
+//              inserHandInNum.setInt(7, handin)
+//              inserHandInNum.setInt(8, check_num)
+//              inserHandInNum.setString(9, value.getString("upTime"))
+//              check_num = 0
+//              inserHandInNum.addBatch()
+//            }
+//          }
 
-            val results: ResultSet = MysqlUtils.select(quUserInfoSql)
-            while (results.next()) {
-              user_id =results.getInt(1)
-              school_id=results.getInt(2)
-              //user_name=results.getString(3)
-              //user_type=results.getInt(4)
-              school_name=results.getString(5)
-              //city=results.getString(6)
-              province=results.getString(7)
-              city_name=results.getString(8)
+                    if ((table == "xh_cloudwork_parts.work" || table == "xh_cloudwork_exam.teacherExam") && sql_type == "u") {
+
+                      val handin = Utils.null20(value.getString("handin"))
+                      if (handin != 0) {
+                        val work_id = value.getString("id")
+                        var proof = workStatusMap.getOrElse(work_id, 99)
+                        if (proof == 99) {
+                          val quproofInfo = "select proof from all_yunzuoye_work where work_id='" + work_id + "'"
+                          val results1: ResultSet = MysqlUtils2.select(quproofInfo)
+                          while (results1.next()) {
+                            proof = results1.getInt(1)
+                          }
+                        }
+                        if (proof == 0) check_num = 1
+                        inserHandInNum.setString(1, work_id)
+                        inserHandInNum.setInt(2, handin)
+                        inserHandInNum.setInt(3, check_num)
+                        inserHandInNum.setString(4, value.getString("upTime"))
+                        inserHandInNum.setInt(5, value.getString("upTime").split(" ")(1).split(":")(0).toInt)
+                        inserHandInNum.setString(6, value.getString("upTime").split(" ")(0))
+                        inserHandInNum.setInt(7, handin)
+                        inserHandInNum.setInt(8, check_num)
+                        inserHandInNum.setString(9, value.getString("upTime"))
+                        check_num = 0
+
+
+                        inserHandInCount.setInt(1, 1)
+                        inserHandInCount.setString(2, value.getString("upTime"))
+                        inserHandInCount.setInt(3, value.getString("upTime").split(" ")(1).split(":")(0).toInt)
+                        inserHandInCount.setString(4, value.getString("upTime").split(" ")(0))
+                        inserHandInCount.setString(5, value.getString("upTime"))
+
+
+                        inserHandInCount.addBatch()
+                        inserHandInNum.addBatch()
+                      }
+                    }
+          if ((table == "xh_cloudwork_parts.studentWork" || table == "xh_cloudwork_exam.studentExam") && sql_type == "uu") {
+            workFlag = Utils.null2kong(value.getString("workFlag"))
+
+            if (workFlag == "1" || workFlag == "2") {
+              workFlag124 = Utils.null20(value.getInteger("1")) + Utils.null20(value.getInteger("2")) + Utils.null20(value.getInteger("4")) + Utils.null20(value.getInteger("10"))
             }
-
-          }
-          insertTiZhou.setInt(1,1)
-          insertTiZhou.setInt(2,count)
-          insertTiZhou.setInt(3,timeConsume)
-          insertTiZhou.setInt(4,subject_id)
-          insertTiZhou.setString(5,subject_name)
-          insertTiZhou.setString(6, value.getString("upTime"))
-          insertTiZhou.setInt(7, value.getString("upTime").split(" ")(1).split(":")(0).toInt)
-          insertTiZhou.setString(8, value.getString("upTime").split(" ")(0))
-          insertTiZhou.setInt(9,school_id)
-          insertTiZhou.setString(10,school_name)
-          insertTiZhou.setString(11,province)
-          insertTiZhou.setString(12,city)
-          insertTiZhou.setInt(13,count)
-          insertTiZhou.setInt(14,timeConsume)
-          insertTiZhou.setString(15, value.getString("upTime"))
-          //维度信息
-
-          insertTiZhou.addBatch()
-        }
-        if(table.contains("ClassroomBase")&&sql_type=="i"){
-          val userid=value.getInteger("UserId")
-          subject_id=Utils.null20(value.getInteger("subject"))
-          if (subject_id==0){
-            val qusubjectInfo = "select subject_id from fact_teacher_info where teacher_id="+userid+" order by subject_id limit 1"
-            val results1: ResultSet = MysqlUtils1.select(qusubjectInfo)
-            while (results1.next()) {
-              subject_id = results1.getInt(1)
+            if (workFlag == "4") {
+              workFlag124 = Utils.null20(value.getInteger("1")) + Utils.null20(value.getInteger("2")) + Utils.null20(value.getInteger("3")) + Utils.null20(value.getInteger("6"))
+            }
+            if (workFlag124 != 0) {
+              Map += (value.getString("upTime") -> "4")
+              insertAutoCorrect.setInt(1, workFlag124)
+              insertAutoCorrect.setString(2, value.getString("upTime"))
+              insertAutoCorrect.setString(3, value.getString("upTime").split(" ")(0))
+              insertAutoCorrect.setInt(4, value.getString("upTime").split(" ")(1).split(":")(0).toInt)
+              insertAutoCorrect.setInt(5, workFlag124)
+              insertAutoCorrect.setString(6, value.getString("upTime"))
+              insertAutoCorrect.addBatch()
             }
           }
-          val userinfo=emptyMap.getOrElse(userid,"信息错误")
-          if(userinfo!="信息错误") {
-            user_id = userinfo.split("#")(0).toInt
-            school_id = userinfo.split("#")(1).toInt
-            school_name = userinfo.split("#")(2)
-            province = userinfo.split("#")(3)
-            city_name = userinfo.split("#")(4)
-          }
-          if(userinfo=="信息错误"){
-
-            val quUserInfoSql = "select a.iUserId,a.iSchoolId,a.sUserName,a.iUserType,b.sSchoolName,b.scountyname,b.sProvinceName,b.sCityName  from \n(select * from xh_user_service.XHSys_User where  iUserId="+user_id+") a \nLEFT JOIN \nxh_user_service.XHSchool_Info b \non  a.iSchoolId=b.ischoolid and b.bdelete=0 and b.istatus in (1,2)"
-            val results: ResultSet = MysqlUtils.select(quUserInfoSql)
-            while (results.next()) {
-
-              user_id =results.getInt(1)
-              school_id=results.getInt(2)
-              //user_name=results.getString(3)
-              //user_type=results.getInt(4)
-               school_name=results.getString(5)
-              //city=results.getString(6)
-               province=results.getString(7)
-              city_name=results.getString(8)
+          if (table == "xh_king.game" && Utils.null20(value.getInteger("isHomeWork")) == 1) {
+            val timeConsume = Utils.null20(value.getInteger("timeConsuming"))
+            val count = Utils.null20(value.getInteger("count"))
+            val subject_id = Utils.null20(value.getInteger("subjectId"))
+            val subject_name = subjectMap.getOrElse(subject_id, "")
+            val userid = value.getInteger("studentId")
+            val userinfo = emptyMap.getOrElse(userid, "信息错误")
+            if (userinfo != "信息错误") {
+              user_id = userinfo.split("#")(0).toInt
+              school_id = userinfo.split("#")(1).toInt
+              school_name = userinfo.split("#")(2)
+              province = userinfo.split("#")(3)
+              city_name = userinfo.split("#")(4)
             }
+            if (userinfo == "信息错误") {
+              val quUserInfoSql = "select a.iUserId,a.iSchoolId,a.sUserName,a.iUserType,b.sSchoolName,b.scountyname,b.sProvinceName,b.sCityName  from \n(select * from xh_user_service.XHSys_User where  iUserId=" + user_id + ") a \nLEFT JOIN \nxh_user_service.XHSchool_Info b \non  a.iSchoolId=b.ischoolid and b.bdelete=0 and b.istatus in (1,2)"
 
+              val results: ResultSet = MysqlUtils.select(quUserInfoSql)
+              while (results.next()) {
+                user_id = results.getInt(1)
+                school_id = results.getInt(2)
+                //user_name=results.getString(3)
+                //user_type=results.getInt(4)
+                school_name = results.getString(5)
+                //city=results.getString(6)
+                province = results.getString(7)
+                city_name = results.getString(8)
+              }
+
+            }
+            insertTiZhou.setInt(1, 1)
+            insertTiZhou.setInt(2, count)
+            insertTiZhou.setInt(3, timeConsume)
+            insertTiZhou.setInt(4, subject_id)
+            insertTiZhou.setString(5, subject_name)
+            insertTiZhou.setString(6, value.getString("upTime"))
+            insertTiZhou.setInt(7, value.getString("upTime").split(" ")(1).split(":")(0).toInt)
+            insertTiZhou.setString(8, value.getString("upTime").split(" ")(0))
+            insertTiZhou.setInt(9, school_id)
+            insertTiZhou.setString(10, school_name)
+            insertTiZhou.setString(11, province)
+            insertTiZhou.setString(12, city)
+            insertTiZhou.setInt(13, count)
+            insertTiZhou.setInt(14, timeConsume)
+            insertTiZhou.setString(15, value.getString("upTime"))
+            //维度信息
+
+            insertTiZhou.addBatch()
           }
-          val subject_name=subjectMap.getOrElse(subject_id,"科目错误")
-          insertYunkeTang.setString(1,value.getString("classroomId"))
-          insertYunkeTang.setString(2,value.getString("classroomName"))
-          insertYunkeTang.setInt(3,value.getInteger("pre_count"))
-          insertYunkeTang.setInt(4,0)
-          insertYunkeTang.setInt(5,0)
-          insertYunkeTang.setInt(6,1)
-          insertYunkeTang.setInt(7,subject_id)
-          insertYunkeTang.setString(8,subject_name)
-          insertYunkeTang.setString(9,"0")
-          insertYunkeTang.setInt(10, 0)
-          insertYunkeTang.setString(11, value.getString("upTime").split(" ")(0))
-          insertYunkeTang.setString(12,value.getString("upTime"))
-          insertYunkeTang.setString(13,value.getString("app"))
-          insertYunkeTang.setString(14,"0")
-          insertYunkeTang.setInt(15, 0)
-          //用户信息
-          insertYunkeTang.setInt(16,school_id)
+          if (table.contains("ClassroomBase") && sql_type == "i") {
+            val userid = value.getInteger("UserId")
+            subject_id = Utils.null20(value.getInteger("subject"))
+            if (subject_id == 0) {
+              val qusubjectInfo = "select subject_id from fact_teacher_info where teacher_id=" + userid + " order by subject_id limit 1"
+              val results1: ResultSet = MysqlUtils1.select(qusubjectInfo)
+              while (results1.next()) {
+                subject_id = results1.getInt(1)
+              }
+            }
+            val userinfo = emptyMap.getOrElse(userid, "信息错误")
+            if (userinfo != "信息错误") {
+              user_id = userinfo.split("#")(0).toInt
+              school_id = userinfo.split("#")(1).toInt
+              school_name = userinfo.split("#")(2)
+              province = userinfo.split("#")(3)
+              city_name = userinfo.split("#")(4)
+            }
+            if (userinfo == "信息错误") {
+
+              val quUserInfoSql = "select a.iUserId,a.iSchoolId,a.sUserName,a.iUserType,b.sSchoolName,b.scountyname,b.sProvinceName,b.sCityName  from \n(select * from xh_user_service.XHSys_User where  iUserId=" + user_id + ") a \nLEFT JOIN \nxh_user_service.XHSchool_Info b \non  a.iSchoolId=b.ischoolid and b.bdelete=0 and b.istatus in (1,2)"
+              val results: ResultSet = MysqlUtils.select(quUserInfoSql)
+              while (results.next()) {
+
+                user_id = results.getInt(1)
+                school_id = results.getInt(2)
+                //user_name=results.getString(3)
+                //user_type=results.getInt(4)
+                school_name = results.getString(5)
+                //city=results.getString(6)
+                province = results.getString(7)
+                city_name = results.getString(8)
+              }
+
+            }
+            val subject_name = subjectMap.getOrElse(subject_id, "")
+            insertYunkeTang.setString(1, value.getString("classroomId"))
+            insertYunkeTang.setString(2, value.getString("classroomName"))
+            insertYunkeTang.setInt(3, value.getInteger("pre_count"))
+            insertYunkeTang.setInt(4, 0)
+            insertYunkeTang.setInt(5, 0)
+            insertYunkeTang.setInt(6, 1)
+            insertYunkeTang.setInt(7, subject_id)
+            insertYunkeTang.setString(8, subject_name)
+            insertYunkeTang.setString(9, "0")
+            insertYunkeTang.setInt(10, 0)
+            insertYunkeTang.setString(11, value.getString("upTime").split(" ")(0))
+            insertYunkeTang.setString(12, value.getString("upTime"))
+            insertYunkeTang.setString(13, value.getString("app"))
+            insertYunkeTang.setString(14, "0")
+            insertYunkeTang.setInt(15, 0)
+            //用户信息
+            insertYunkeTang.setInt(16, school_id)
 
 
-          insertYunkeTang.setString(17,school_name)
-          insertYunkeTang.setString(18,province)
-          insertYunkeTang.setString(19,city_name)
-          insertYunkeTang.setString(20,value.getString("id"))
+            insertYunkeTang.setString(17, school_name)
+            insertYunkeTang.setString(18, province)
+            insertYunkeTang.setString(19, city_name)
+            insertYunkeTang.setString(20, value.getString("id"))
 
-          insertYunkeTang.setInt(21,school_id)
+            insertYunkeTang.setInt(21, school_id)
 
-          insertYunkeTang.addBatch()
+            insertYunkeTang.addBatch()
 
-          user_id =0
-          school_id=0
-          user_name=""
-          user_type=0
-          school_name=""
-          city=""
-          province=""
-          city_name=""
+            user_id = 0
+            school_id = 0
+            user_name = ""
+            user_type = 0
+            school_name = ""
+            city = ""
+            province = ""
+            city_name = ""
+          }
+
+
+          if (table.contains("ClassroomBase") && sql_type == "u") {
+            val id = value.getString("id")
+
+            val count = Utils.null20(value.getInteger("count"))
+            if (count != 0) {
+              updatePreCount.setInt(1, count)
+              updatePreCount.setString(2, id)
+              updatePreCount.addBatch()
+            }
+          }
         }
 
-
-        if(table.contains("ClassroomBase")&&sql_type=="u"){
-          val id=value.getString("id")
-
-          val count=Utils.null20(value.getInteger("count"))
-          if(count!=0) {
-            updatePreCount.setInt(1, count)
-            updatePreCount.setString(2, id)
-            updatePreCount.addBatch()
+        catch {
+          case e: Exception => {
+            log.error("数据异常：%s, \\r\\n %s".format(e, values))
+            print(new SimpleDateFormat("yyyy-MM-dd HH:mm:ss").format(new Date)+"本条数据异常" + e + value)
           }
         }
       }
 
+    try {
     // val count1 = insertAutoCorrect.executeBatch //批量后执行
       val count2 = insertStmt.executeBatch //批量后执行
       val count3 = insertTiZhou.executeBatch //批量后执行
@@ -793,23 +846,29 @@ class MySqlSink2() extends RichSinkFunction[Iterable[JSONObject]] with Constants
       val count5 = inserWorkID.executeBatch //批量后执行
       val count6 = inserHandInNum.executeBatch //批量后执行
       val count7 = updatePreCount.executeBatch //批量后执行
+      val count8 =inserHandInCount.executeBatch()
+      System.out.println("云作业成功了插入了了" + count2.length + "行数据")
+      System.out.println("题舟成功了插入了了" + count3.length + "行数据")
+      System.out.println("云课堂成功了插入了了" + count4.length + "行数据")
+      System.out.println("work表了插入了了" + count5.length + "行数据")
+      System.out.println("已经截至交的作业表插入了" + count6.length + "行数据")
+      System.out.println("预设人数成功了插入了了" + count7.length + "行数据")
+      System.out.println("上交人数成功了插入了了" + count8.length + "行数据")
 
       conn.commit
-//
-     // System.out.println("接口访问量成功了插入了了" + count1.length + "行数据")
-      System.out.println("任务成功了插入了了" + count2.length + "行数据")
-      System.out.println("接口访问量成功了插入了了" + count3.length + "行数据")
-      System.out.println("任务成功了插入了了" + count4.length + "行数据")
-      System.out.println("接口访问量成功了插入了了" + count5.length + "行数据")
-      System.out.println("任务成功了插入了了" + count6.length + "行数据")
-      System.out.println("任务成功了插入了了" + count7.length + "行数据")
+    }
 
-    }catch {
+    catch {
       case e: Exception => {
         log.error("数据异常：%s, \\r\\n %s".format(e, values))
-        print("数据异常"+e +values)
+        print(new SimpleDateFormat("yyyy-MM-dd HH:mm:ss").format(new Date)+"提交数据发生异常" + e )
       }
     }
+//
+     // System.out.println("接口访问量成功了插入了了" + count1.length + "行数据")
+
+
+
   }
 
   // 关闭时做清理工作
@@ -822,11 +881,12 @@ class MySqlSink2() extends RichSinkFunction[Iterable[JSONObject]] with Constants
       inserWorkID.close()
       inserHandInNum.close()
       updatePreCount.close()
+      inserHandInCount.close()
       conn.close()
     //   println("云mysql关闭成功")
     } catch {
       case e: Exception => {
-        println("云mysql关闭失败"+e)
+        println(new SimpleDateFormat("yyyy-MM-dd HH:mm:ss").format(new Date)+"云mysql关闭失败"+e)
       }
     }
 

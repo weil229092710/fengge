@@ -214,7 +214,7 @@ object xiangyingMain extends Constants {
 
 
         //将数据放在内存中
-        val quUserInfoSql1 = "select id,type,user_count from xh_response.imgroup"
+        val quUserInfoSql1 = "select group_id,type0,user_count from all_imgroup_copy"
         val results1: ResultSet = MysqlUtils2.select(quUserInfoSql1)
         while (results1.next()) {
           val id = results1.getInt(1)
@@ -246,7 +246,7 @@ object xiangyingMain extends Constants {
       }
       catch {
         case e: Exception => {
-          println("云mysql连接失败"+e)
+          println(new SimpleDateFormat("yyyy-MM-dd HH:mm:ss").format(new Date)+"相应云mysql连接失败"+e)
         }
       }
     }
@@ -417,7 +417,7 @@ object xiangyingMain extends Constants {
         conn.commit
       } catch {
         case e: Exception => {
-          println("数据错误" +e+ valuess)
+          println(new SimpleDateFormat("yyyy-MM-dd HH:mm:ss").format(new Date)+"相应数据错误" +e+ valuess)
         }
       }
     }
@@ -436,7 +436,7 @@ object xiangyingMain extends Constants {
         //println("云mysql关闭成功")
       } catch {
         case e: Exception => {
-           println("云mysql关闭失败"+e)
+           println(new SimpleDateFormat("yyyy-MM-dd HH:mm:ss").format(new Date)+"云mysql关闭失败"+e)
         }
       }
 
