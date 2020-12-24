@@ -481,7 +481,7 @@ class MySqlSink2() extends RichSinkFunction[Iterable[JSONObject]] with Constants
 
       dataSource = new BasicDataSource
       conn = getConnection(dataSource)
-      conn.setAutoCommit(false) // 开始事务
+      //conn.setAutoCommit(false) // 开始事务
 
       insertStmt = conn.prepareStatement("iNSERT INTO all_real_yunzuoye (\n\tworks,\n\tworks_num,\n\tsubject_id,\n\tuptime,\n  cur_hour\n,cur_day,subject_name,school_id,school_name,province,city)\nVALUES\n\t(?, ?, ?, ?, ?,?,?, ?, ?,?,?) ON DUPLICATE KEY UPDATE works = works + ?,\n\tworks_num = works_num + ?,\n\tuptime=?")
       //insertAutoCorrect=conn.prepareStatement("INSERT INTO all_auto_correct_count (\n\tauto_num,\n  uptime,\n  cur_day,\ncur_hour\n)\nVALUES\n\t(?, ?, ?, ?) ON DUPLICATE KEY UPDATE auto_num = auto_num + ?,uptime=?")
@@ -827,7 +827,7 @@ class MySqlSink2() extends RichSinkFunction[Iterable[JSONObject]] with Constants
       System.out.println("预设人数成功了插入了了" + count7.length + "行数据")
       System.out.println("上交人数成功了插入了了" + count8.length + "行数据")
 
-      conn.commit
+      //conn.commit
     }
 
     catch {

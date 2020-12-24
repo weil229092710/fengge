@@ -202,7 +202,7 @@ object xiangyingMain extends Constants {
         import org.apache.commons.dbcp2.BasicDataSource
         dataSource = new BasicDataSource
         conn = getConnection(dataSource)
-        conn.setAutoCommit(false) // 开始事务
+        //conn.setAutoCommit(false) // 开始事务
         //学生私聊
         insertStmt = conn.prepareStatement("INSERT INTO all_xiangying_student_count (\n\tstudent_num,\n  uptime,\n  cur_day,\n  cur_hour\n,school_id,school_name,province,city)\nVALUES\n\t(?,?,?, ?,?,?,?, ?) ON DUPLICATE KEY UPDATE student_num = student_num + 1,uptime=?")
         //群信息
@@ -414,7 +414,7 @@ object xiangyingMain extends Constants {
 //        System.out.println("接口访问量成功了插入了了" + count3.length + "行数据")
 //        System.out.println("任务成功了插入了了" + count4.length + "行数据")
 
-        conn.commit
+        //conn.commit
       } catch {
         case e: Exception => {
           println(new SimpleDateFormat("yyyy-MM-dd HH:mm:ss").format(new Date)+"相应数据错误" +e+ valuess)
