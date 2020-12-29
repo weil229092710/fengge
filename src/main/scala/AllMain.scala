@@ -602,7 +602,7 @@ class MySqlSink2() extends RichSinkFunction[Iterable[JSONObject]] with Constants
             inserWorkID.setInt(2, value.getInteger("proofreadState"))
             inserWorkID.setString(3, value.getString("upTime"))
             inserWorkID.setInt(4, value.getInteger("handInNum"))
-            inserWorkID.setInt(5, userid)
+            inserWorkID.setInt(5, school_id)
             inserWorkID.setInt(6, value.getInteger("topicNum"))
             inserWorkID.setString(7, value.getString("upto_time"))
             inserWorkID.setString(8, value.getString("upTime"))
