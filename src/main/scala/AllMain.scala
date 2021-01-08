@@ -413,7 +413,7 @@ object AllMain extends Constants{
 
      //.print()
 
-    env.execute("feng_yunzuoye_tizhou_2")
+    env.execute("all_yunzuoye_tizhou_2")
   }
 }
 
@@ -423,7 +423,7 @@ class ByWindow() extends AllWindowFunction[JSONObject, Iterable[JSONObject], Tim
 
 
     if(input.nonEmpty) {
-      System.out.println("1 秒内收集到 接口的条数是：" + input.size)
+      //System.out.println("1 秒内收集到 接口的条数是：" + input.size)
 
       out.collect(input)
         }
