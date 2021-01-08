@@ -9,7 +9,7 @@ import java.util.Properties;
  * Created by root on 2019/7/5 0005.
  */
 public class kafka_consumer {
-    public static String topic = "mysql_binlog";
+    public static String topic = "channel_log";
     public static String brokerList = "192.168.5.85:9092,192.168.5.86:9092,192.168.5.87:9092";
     public static void main(String[] args) {
         kafka_consumer();

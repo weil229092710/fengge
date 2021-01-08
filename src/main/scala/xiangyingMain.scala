@@ -1,22 +1,16 @@
 import java.sql.{Connection, PreparedStatement, ResultSet}
 import java.text.SimpleDateFormat
-import java.util.{Date, Locale}
-
-import com.alibaba.fastjson.{JSON, JSONArray, JSONObject}
-import org.apache.flink.api.common.restartstrategy.RestartStrategies
-import org.apache.flink.configuration.Configuration
-import org.apache.flink.runtime.state.filesystem.FsStateBackend
-import org.apache.flink.streaming.api.environment.CheckpointConfig.ExternalizedCheckpointCleanup
-import org.apache.flink.streaming.api.{CheckpointingMode, TimeCharacteristic}
-import org.apache.flink.streaming.api.functions.sink.{RichSinkFunction, SinkFunction}
-import org.apache.flink.streaming.api.scala._
-import org.apache.flink.streaming.api.scala.function.AllWindowFunction
-import org.apache.flink.streaming.api.windowing.windows.TimeWindow
-import org.apache.flink.util.Collector
+import java.util.Date
 import java.util.concurrent.TimeUnit
 
-import com.xuehai.utils.{Constants, MysqlUtils, MysqlUtils1, MysqlUtils2, Utils}
+import com.alibaba.fastjson.{JSON, JSONArray, JSONObject}
+import com.xuehai.utils.{Constants, MysqlUtils, MysqlUtils2, Utils}
+import org.apache.flink.api.common.restartstrategy.RestartStrategies
 import org.apache.flink.api.common.time.Time
+import org.apache.flink.configuration.Configuration
+import org.apache.flink.streaming.api.TimeCharacteristic
+import org.apache.flink.streaming.api.functions.sink.{RichSinkFunction, SinkFunction}
+import org.apache.flink.streaming.api.scala._
 import org.apache.flink.streaming.connectors.kafka.FlinkKafkaConsumer010
 import org.apache.flink.streaming.util.serialization.SimpleStringSchema
 
@@ -132,7 +126,7 @@ object xiangyingMain extends Constants {
 
     //.print()
 
-    env.execute("fengge_xiangying")
+    env.execute("fengge_xiangying_2")
   }
 
 }
@@ -170,7 +164,7 @@ object xiangyingMain extends Constants {
     var user_name=""
     var user_type=0
     var school_name=""
-    var  city=""
+    var  countyname=""
     var  province=""
     var  city_name=""
 
@@ -204,13 +198,13 @@ object xiangyingMain extends Constants {
         conn = getConnection(dataSource)
         //conn.setAutoCommit(false) // 开始事务
         //学生私聊
-        insertStmt = conn.prepareStatement("INSERT INTO all_xiangying_student_count (\n\tstudent_num,\n  uptime,\n  cur_day,\n  cur_hour\n,school_id,school_name,province,city)\nVALUES\n\t(?,?,?, ?,?,?,?, ?) ON DUPLICATE KEY UPDATE student_num = student_num + 1,uptime=?")
+        insertStmt = conn.prepareStatement("INSERT INTO all_xiangying_count (num,\n  uptime,\n  cur_day,\n  cur_hour\n,school_id,school_name,province,city,county,type)\nVALUES\n\t(?,?,?, ?,?,?,?, ?,?,?) ON DUPLICATE KEY UPDATE num = num + 1,uptime=?")
         //群信息
         insertGroup = conn.prepareStatement("INSERT INTO all_imgroup_copy(group_id,type0,user_count,uptime) VALUES(?,?,?,?) ON DUPLICATE KEY UPDATE type0 = ?,user_count =?,uptime=?")
         //教师群发
-        insertGroupCount = conn.prepareStatement("INSERT INTO all_xiangying_teacher_count(teacher_num,uptime,cur_day,cur_hour,school_id,school_name,province,city) VALUES(?,?,?,?,?,?,?, ?) ON DUPLICATE KEY UPDATE teacher_num = teacher_num + ?,uptime=?")
+        insertGroupCount = conn.prepareStatement("INSERT INTO all_xiangying_count(num,uptime,cur_day,cur_hour,school_id,school_name,province,city,county,type) VALUES(?,?,?,?,?,?,?, ?,?, ?) ON DUPLICATE KEY UPDATE num = num + ?,uptime=?")
         //教师私聊
-        insertGroup1Count = conn.prepareStatement("INSERT INTO all_xiangying_teacher_count(teacher_num,uptime,cur_day,cur_hour,school_id,school_name,province,city) VALUES(?,?,?,?,?,?,?, ?) ON DUPLICATE KEY UPDATE teacher_num = teacher_num + 1,uptime=?")
+        insertGroup1Count = conn.prepareStatement("INSERT INTO all_xiangying_count(num,uptime,cur_day,cur_hour,school_id,school_name,province,city,county,type) VALUES(?,?,?,?,?,?,?, ?,?, ?) ON DUPLICATE KEY UPDATE num = num + 1,uptime=?")
 
 
         //将数据放在内存中
@@ -234,10 +228,10 @@ object xiangyingMain extends Constants {
           user_name=results.getString(3)
           user_type=results.getInt(4)
           school_name=results.getString(5)
-          city=results.getString(6)
+          countyname=results.getString(6)
           province=results.getString(7)
           city_name=results.getString(8)
-          val info=user_id + "#" + school_id + "#" + school_name + "#" + province+"#" + city_name+"#" + user_type
+          val info=user_id + "#" + school_id + "#" + school_name + "#" + province+"#" + city_name+"#" + user_type+"#" + countyname
           emptyMap += (user_id -> info)
         }
 
@@ -269,6 +263,7 @@ object xiangyingMain extends Constants {
               province = userinfo.split("#")(3)
               city_name = userinfo.split("#")(4)
               user_type = userinfo.split("#")(5).toInt
+              countyname= userinfo.split("#")(6)
             }
             if(userinfo=="信息错误"){
 
@@ -281,12 +276,12 @@ object xiangyingMain extends Constants {
                 //user_name=results.getString(3)
                 user_type=results.getInt(4)
                 school_name=results.getString(5)
-                //city=results.getString(6)
+                countyname=results.getString(6)
                 province=results.getString(7)
                 city_name=results.getString(8)
               }
             }
-            if (user_type == 4) //用户类型 1教师4学生
+            if (user_type == 4) //用户类型 4教师1学生
             {
               insertGroup1Count.setInt(1, 1)
               insertGroup1Count.setString(2, values.getString("Time"))
@@ -298,10 +293,12 @@ object xiangyingMain extends Constants {
               insertGroup1Count.setString(6, school_name)
               insertGroup1Count.setString(7, province)
               insertGroup1Count.setString(8, city_name)
-              insertGroup1Count.setString(9, values.getString("Time"))
+              insertGroup1Count.setString(9, countyname)
+              insertGroup1Count.setInt(10, 4)
+              insertGroup1Count.setString(11, values.getString("Time"))
               insertGroup1Count.addBatch()
             }
-            if (user_type == 1) //用户类型 1教师4学生
+            if (user_type == 1) //用户类型 1学生 4教师
             {
               insertStmt.setInt(1, 1)
               insertStmt.setString(2, values.getString("Time"))
@@ -311,7 +308,9 @@ object xiangyingMain extends Constants {
               insertStmt.setString(6, school_name)
               insertStmt.setString(7, province)
               insertStmt.setString(8, city_name)
-              insertStmt.setString(9, values.getString("Time"))
+              insertStmt.setString(9, countyname)
+              insertStmt.setInt(10, 1)
+              insertStmt.setString(11, values.getString("Time"))
               insertStmt.addBatch()
             }
           }
@@ -345,6 +344,8 @@ object xiangyingMain extends Constants {
               school_name = userinfo.split("#")(2)
               province = userinfo.split("#")(3)
               city_name = userinfo.split("#")(4)
+              user_type = userinfo.split("#")(5).toInt
+              countyname= userinfo.split("#")(6)
             }
             if(userinfo=="信息错误"){
 
@@ -357,15 +358,11 @@ object xiangyingMain extends Constants {
                 //user_name=results.getString(3)
                 //user_type=results.getInt(4)
                 school_name=results.getString(5)
-                //city=results.getString(6)
+                countyname=results.getString(6)
                 province=results.getString(7)
                 city_name=results.getString(8)
               }
             }
-
-
-
-
             var group_id = values.getInteger("group_id")
             if(empty.get(values.getInteger("group_id"))==Some){
               groupStr=empty.get(values.getInteger("group_id")).get
@@ -391,9 +388,10 @@ object xiangyingMain extends Constants {
               insertGroupCount.setString(6, school_name)
               insertGroupCount.setString(7, province)
               insertGroupCount.setString(8, city_name)
-              insertGroupCount.setInt(9, user_count-1)
-
-              insertGroupCount.setString(10, values.getString("Time"))
+              insertGroupCount.setString(9, countyname)
+              insertGroupCount.setInt(10, 4)
+              insertGroupCount.setInt(11, user_count-1)
+              insertGroupCount.setString(12, values.getString("Time"))
               insertGroupCount.addBatch()
             }
           }
@@ -417,7 +415,7 @@ object xiangyingMain extends Constants {
         //conn.commit
       } catch {
         case e: Exception => {
-          println(new SimpleDateFormat("yyyy-MM-dd HH:mm:ss").format(new Date)+"相应数据错误" +e+ valuess)
+          println(new SimpleDateFormat("yyyy-MM-dd HH:mm:ss").format(new Date)+"响应数据错误" +e+ valuess)
         }
       }
     }

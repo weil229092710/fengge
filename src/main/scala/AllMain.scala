@@ -72,7 +72,7 @@ object AllMain extends Constants{
 //      })
        .map(x => {
          try{
-            //println(x)
+            println(x)
            val json=	JSON.parseObject(x)
            obj.clear()
            emptyMap.clear()
@@ -405,7 +405,7 @@ object AllMain extends Constants{
        .filter(_.getLong("updateTime")!=null)
        .filter(_.size()>4)
 
-       .assignAscendingTimestamps(_.getLong("updateTime")*1000)
+       .assignAscendingTimestamps(_.getLong("updateTime")*2000)
        .timeWindowAll(org.apache.flink.streaming.api.windowing.time.Time.seconds(5))
 
       .apply(new ByWindow())
@@ -413,7 +413,7 @@ object AllMain extends Constants{
 
      //.print()
 
-    env.execute("feng_yunzuoye_tizhou")
+    env.execute("feng_yunzuoye_tizhou_2")
   }
 }
 
@@ -450,7 +450,7 @@ class MySqlSink2() extends RichSinkFunction[Iterable[JSONObject]] with Constants
   var workFlag124=0
    val Map = new mutable.HashMap[String, String]()
   val teacherInfoMap = new mutable.HashMap[Int, Int]()
-  val workStatusMap = new mutable.HashMap[String, Int]()
+  val workStatusMap = new mutable.HashMap[String, String]()
     var workFlag=""
   import org.apache.commons.dbcp2.BasicDataSource
 
@@ -459,6 +459,7 @@ class MySqlSink2() extends RichSinkFunction[Iterable[JSONObject]] with Constants
   var teacher_id=0
  var check_num=0
   var emptyMap = new mutable.HashMap[Int, String]()
+  var workMap = new mutable.HashMap[Int, String]()
 
   var  user_id =0
   var school_id=0
@@ -468,6 +469,9 @@ class MySqlSink2() extends RichSinkFunction[Iterable[JSONObject]] with Constants
   var  city=""
   var  province=""
   var  city_name=""
+  var countyname=""
+ var  workinfo=""
+  var proof=99
 
 
 
@@ -483,14 +487,14 @@ class MySqlSink2() extends RichSinkFunction[Iterable[JSONObject]] with Constants
       conn = getConnection(dataSource)
       //conn.setAutoCommit(false) // 开始事务
 
-      insertStmt = conn.prepareStatement("iNSERT INTO all_real_yunzuoye (\n\tworks,\n\tworks_num,\n\tsubject_id,\n\tuptime,\n  cur_hour\n,cur_day,subject_name,school_id,school_name,province,city)\nVALUES\n\t(?, ?, ?, ?, ?,?,?, ?, ?,?,?) ON DUPLICATE KEY UPDATE works = works + ?,\n\tworks_num = works_num + ?,\n\tuptime=?")
+      insertStmt = conn.prepareStatement("iNSERT INTO all_real_yunzuoye (\n\tworks,\n\tworks_num,\n\tsubject_id,\n\tuptime,\n  cur_hour\n,cur_day,subject_name,school_id,school_name,province,city,county)\nVALUES\n\t(?, ?, ?, ?, ?,?,?, ?, ?,?,?,?) ON DUPLICATE KEY UPDATE works = works + ?,\n\tworks_num = works_num + ?,\n\tuptime=?")
       //insertAutoCorrect=conn.prepareStatement("INSERT INTO all_auto_correct_count (\n\tauto_num,\n  uptime,\n  cur_day,\ncur_hour\n)\nVALUES\n\t(?, ?, ?, ?) ON DUPLICATE KEY UPDATE auto_num = auto_num + ?,uptime=?")
-      insertTiZhou=conn.prepareStatement("INSERT INTO all_real_tizhou(zilian_num,zilian_topic_count,zilian_consum,subject_id,subject_name,uptime,cur_hour,cur_day,school_id,school_name,province,city) VALUES(?,?,?,?,?,?,?,?,?,?,?,?) ON DUPLICATE KEY UPDATE zilian_num=zilian_num+1,zilian_topic_count=zilian_topic_count+?,zilian_consum=zilian_consum+?,uptime=?")
-      insertYunkeTang=conn.prepareStatement("INSERT INTO all_yunketang_real (room_id, room_name, pre_count, online_count, max_count, status, subject_id, subject_name, statusUptime1to2,statusUphour1to2, cur_day, create_time, app,statusUptime2to3,statusUphour2to3,school_id,school_name,province,city,id) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?) ON DUPLICATE KEY UPDATE school_id=?")
-      inserWorkID=conn.prepareStatement("INSERT INTO all_yunzuoye_work (\n\twork_id,\n\tproof,\n\tuptime\n ,handinnum ,user_id,topic_num,upto_time)\nVALUES\n\t(?, ?,?,?,?,?,?) ON DUPLICATE KEY UPDATE uptime=?")
+      insertTiZhou=conn.prepareStatement("INSERT INTO all_real_tizhou(zilian_num,zilian_topic_count,zilian_consum,subject_id,subject_name,uptime,cur_hour,cur_day,school_id,school_name,province,city,county) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?) ON DUPLICATE KEY UPDATE zilian_num=zilian_num+1,zilian_topic_count=zilian_topic_count+?,zilian_consum=zilian_consum+?,uptime=?")
+      insertYunkeTang=conn.prepareStatement("INSERT INTO all_yunketang_real (room_id, room_name, pre_count, online_count, max_count, status, subject_id, subject_name, statusUptime1to2,statusUphour1to2, cur_day, create_time, app,statusUptime2to3,statusUphour2to3,school_id,school_name,province,city,id,county) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?) ON DUPLICATE KEY UPDATE school_id=?")
+      inserWorkID=conn.prepareStatement("INSERT INTO all_yunzuoye_work (\n\twork_id,\n\tproof,\n\tuptime\n ,handinnum ,school_id,topic_num,upto_time,province,city,county,school_name)\nVALUES\n\t(?, ?,?,?,?,?,?,?,?,?,?) ON DUPLICATE KEY UPDATE uptime=?")
       inserHandInNum=conn.prepareStatement("    iNSERT INTO all_yunzuoye_handin (\n work_id, handin_num,\n        check_num,\n        uptime,\n        cur_hour\n        ,cur_day)\n      VALUES\n      (?, ?, ?, ?, ?,?) ON DUPLICATE KEY UPDATE handin_num = ?,\n      check_num = check_num + ?,\n      uptime=?")
       updatePreCount=conn.prepareStatement(" UPDATE all_yunketang_real set pre_count=? where id =?")
-     inserHandInCount=conn.prepareStatement("iNSERT INTO all_hand_num (\n        handin_num,\n       \n        uptime,\n        cur_hour\n        ,cur_day)\n      VALUES\n      (?, ?, ?, ?) ON DUPLICATE KEY UPDATE handin_num = handin_num+1,\n      uptime=?")
+      inserHandInCount=conn.prepareStatement("iNSERT INTO all_hand_num (\n        handin_num,\n       \n        uptime,\n        cur_hour\n        ,cur_day,school_id,province,city,county,school_name)\n      VALUES\n      (?, ?, ?, ?,?, ?, ?, ?, ?) ON DUPLICATE KEY UPDATE handin_num = handin_num+1,\n      uptime=?")
 
     //教师对应科目信息将数据放在内存中
     try {
@@ -502,12 +506,18 @@ class MySqlSink2() extends RichSinkFunction[Iterable[JSONObject]] with Constants
 //        teacherInfoMap+= (teacher_id ->subject_id)
 //      }
 
-      val proofStatusInfo = "select work_id,proof from all_yunzuoye_work"
+      val proofStatusInfo = "select work_id,proof,school_id,province,city,county,school_name from all_yunzuoye_work"
       val results2: ResultSet = MysqlUtils2.select(proofStatusInfo)
       while (results2.next()) {
         val work_id = results2.getString(1)
         val proof= results2.getInt(2)
-        workStatusMap+= (work_id ->proof)
+        school_id = results2.getInt(3)
+        province= results2.getString(4)
+        city = results2.getString(5)
+        countyname = results2.getString(6)
+        school_name = results2.getString(7)
+        workinfo= proof+ "#"  +school_id + "#"  + province+"#" + city+"#" + countyname+"#" + school_name
+        workStatusMap+= (work_id ->workinfo)
       }
     }
     catch {
@@ -523,17 +533,21 @@ class MySqlSink2() extends RichSinkFunction[Iterable[JSONObject]] with Constants
       val results: ResultSet = MysqlUtils.select(quUserInfoSql)
       while (results.next()) {
 
-       user_id =results.getInt(1)
-       school_id=results.getInt(2)
+        user_id =results.getInt(1)
+        school_id=results.getInt(2)
         user_name=results.getString(3)
-       user_type=results.getInt(4)
+        user_type=results.getInt(4)
         school_name=results.getString(5)
-         city=results.getString(6)
+        city=results.getString(6)
         province=results.getString(7)
         city_name=results.getString(8)
-        val info=user_id + "#" + school_id + "#" + school_name + "#" + province+"#" + city_name
+        val info=user_id + "#" + school_id + "#" + school_name + "#" + province+"#" + city_name+"#" + city
         emptyMap += (user_id -> info)
       }
+
+
+
+
 
 
     }
@@ -569,6 +583,7 @@ class MySqlSink2() extends RichSinkFunction[Iterable[JSONObject]] with Constants
               school_name = userinfo.split("#")(2)
               province = userinfo.split("#")(3)
               city_name = userinfo.split("#")(4)
+              countyname = userinfo.split("#")(5)
             }
             if (userinfo == "信息错误") {
 
@@ -580,7 +595,7 @@ class MySqlSink2() extends RichSinkFunction[Iterable[JSONObject]] with Constants
                 //user_name=results.getString(3)
                 //user_type=results.getInt(4)
                 school_name = results.getString(5)
-                //city=results.getString(6)
+                countyname=results.getString(6)
                 province = results.getString(7)
                 city_name = results.getString(8)
               }
@@ -594,9 +609,10 @@ class MySqlSink2() extends RichSinkFunction[Iterable[JSONObject]] with Constants
             insertStmt.setString(9, school_name)
             insertStmt.setString(10, province)
             insertStmt.setString(11, city_name)
-            insertStmt.setInt(12, value.getInteger("handInNum"))
-            insertStmt.setInt(13, value.getInteger("handInNum") * value.getInteger("topicNum"))
-            insertStmt.setString(14, value.getString("upTime"))
+            insertStmt.setString(12, countyname)
+            insertStmt.setInt(13, value.getInteger("handInNum"))
+            insertStmt.setInt(14, value.getInteger("handInNum") * value.getInteger("topicNum"))
+            insertStmt.setString(15, value.getString("upTime"))
 
             inserWorkID.setString(1, value.getString("id"))
             inserWorkID.setInt(2, value.getInteger("proofreadState"))
@@ -605,7 +621,11 @@ class MySqlSink2() extends RichSinkFunction[Iterable[JSONObject]] with Constants
             inserWorkID.setInt(5, school_id)
             inserWorkID.setInt(6, value.getInteger("topicNum"))
             inserWorkID.setString(7, value.getString("upto_time"))
-            inserWorkID.setString(8, value.getString("upTime"))
+            inserWorkID.setString(8, province)
+            inserWorkID.setString(9, city_name)
+            inserWorkID.setString(10, countyname)
+            inserWorkID.setString(11, school_name)
+            inserWorkID.setString(12, value.getString("upTime"))
             inserWorkID.addBatch()
             insertStmt.addBatch()
           }
@@ -614,12 +634,27 @@ class MySqlSink2() extends RichSinkFunction[Iterable[JSONObject]] with Constants
                       val handin = Utils.null20(value.getString("handin"))
                       if (handin != 0) {
                         val work_id = value.getString("id")
-                        var proof = workStatusMap.getOrElse(work_id, 99)
-                        if (proof == 99) {
-                          val quproofInfo = "select proof from all_yunzuoye_work where work_id='" + work_id + "'"
+                        val workinfo = workStatusMap.get(work_id)
+
+                        if(workinfo==Some) {
+                           proof = workStatusMap.get(work_id).get.split("#")(0).toInt
+                          school_id = workStatusMap.get(work_id).get.split("#")(1).toInt
+                          province = workStatusMap.get(work_id).get.split("#")(2)
+                          city = workStatusMap.get(work_id).get.split("#")(3)
+                          countyname = workStatusMap.get(work_id).get.split("#")(4)
+                          school_name = workStatusMap.get(work_id).get.split("#")(5)
+                        }
+                       else
+                         {
+                          val quproofInfo = "select proof,school_id,province,city,county ,school_name from all_yunzuoye_work where work_id='" + work_id + "'"
                           val results1: ResultSet = MysqlUtils2.select(quproofInfo)
                           while (results1.next()) {
                             proof = results1.getInt(1)
+                            school_id = results1.getInt(2)
+                            province= results1.getString(3)
+                            city = results1.getString(4)
+                            countyname = results1.getString(5)
+                            school_name=results1.getString(6)
                           }
                         }
                         if (proof == 0) check_num = 1
@@ -634,14 +669,16 @@ class MySqlSink2() extends RichSinkFunction[Iterable[JSONObject]] with Constants
                         inserHandInNum.setString(9, value.getString("upTime"))
                         check_num = 0
 
-
                         inserHandInCount.setInt(1, 1)
                         inserHandInCount.setString(2, value.getString("upTime"))
                         inserHandInCount.setInt(3, value.getString("upTime").split(" ")(1).split(":")(0).toInt)
                         inserHandInCount.setString(4, value.getString("upTime").split(" ")(0))
-                        inserHandInCount.setString(5, value.getString("upTime"))
-
-
+                        inserHandInCount.setInt(5, school_id)
+                        inserHandInCount.setString(6, province)
+                        inserHandInCount.setString(7, city)
+                        inserHandInCount.setString(8, countyname)
+                        inserHandInCount.setString(9, school_name)
+                        inserHandInCount.setString(10, value.getString("upTime"))
                         inserHandInCount.addBatch()
                         inserHandInNum.addBatch()
                       }
@@ -679,6 +716,7 @@ class MySqlSink2() extends RichSinkFunction[Iterable[JSONObject]] with Constants
               school_name = userinfo.split("#")(2)
               province = userinfo.split("#")(3)
               city_name = userinfo.split("#")(4)
+              countyname= userinfo.split("#")(5)
             }
             if (userinfo == "信息错误") {
               val quUserInfoSql = "select a.iUserId,a.iSchoolId,a.sUserName,a.iUserType,b.sSchoolName,b.scountyname,b.sProvinceName,b.sCityName  from \n(select * from xh_user_service.XHSys_User where  iUserId=" + user_id + ") a \nLEFT JOIN \nxh_user_service.XHSchool_Info b \non  a.iSchoolId=b.ischoolid and b.bdelete=0 and b.istatus in (1,2)"
@@ -690,7 +728,7 @@ class MySqlSink2() extends RichSinkFunction[Iterable[JSONObject]] with Constants
                 //user_name=results.getString(3)
                 //user_type=results.getInt(4)
                 school_name = results.getString(5)
-                //city=results.getString(6)
+                countyname=results.getString(6)
                 province = results.getString(7)
                 city_name = results.getString(8)
               }
@@ -707,10 +745,11 @@ class MySqlSink2() extends RichSinkFunction[Iterable[JSONObject]] with Constants
             insertTiZhou.setInt(9, school_id)
             insertTiZhou.setString(10, school_name)
             insertTiZhou.setString(11, province)
-            insertTiZhou.setString(12, city)
-            insertTiZhou.setInt(13, count)
-            insertTiZhou.setInt(14, timeConsume)
-            insertTiZhou.setString(15, value.getString("upTime"))
+            insertTiZhou.setString(12, city_name)
+            insertTiZhou.setString(13, countyname)
+            insertTiZhou.setInt(14, count)
+            insertTiZhou.setInt(15, timeConsume)
+            insertTiZhou.setString(16, value.getString("upTime"))
             //维度信息
 
             insertTiZhou.addBatch()
@@ -732,6 +771,8 @@ class MySqlSink2() extends RichSinkFunction[Iterable[JSONObject]] with Constants
               school_name = userinfo.split("#")(2)
               province = userinfo.split("#")(3)
               city_name = userinfo.split("#")(4)
+              countyname = userinfo.split("#")(5)
+
             }
             if (userinfo == "信息错误") {
 
@@ -744,7 +785,7 @@ class MySqlSink2() extends RichSinkFunction[Iterable[JSONObject]] with Constants
                 //user_name=results.getString(3)
                 //user_type=results.getInt(4)
                 school_name = results.getString(5)
-                //city=results.getString(6)
+                countyname=results.getString(6)
                 province = results.getString(7)
                 city_name = results.getString(8)
               }
@@ -774,8 +815,8 @@ class MySqlSink2() extends RichSinkFunction[Iterable[JSONObject]] with Constants
             insertYunkeTang.setString(18, province)
             insertYunkeTang.setString(19, city_name)
             insertYunkeTang.setString(20, value.getString("id"))
-
-            insertYunkeTang.setInt(21, school_id)
+            insertYunkeTang.setString(21, countyname)
+            insertYunkeTang.setInt(22, school_id)
 
             insertYunkeTang.addBatch()
 
@@ -819,13 +860,13 @@ class MySqlSink2() extends RichSinkFunction[Iterable[JSONObject]] with Constants
       val count6 = inserHandInNum.executeBatch //批量后执行
       val count7 = updatePreCount.executeBatch //批量后执行
       val count8 =inserHandInCount.executeBatch()
-      System.out.println("云作业成功了插入了了" + count2.length + "行数据")
-      System.out.println("题舟成功了插入了了" + count3.length + "行数据")
-      System.out.println("云课堂成功了插入了了" + count4.length + "行数据")
-      System.out.println("work表了插入了了" + count5.length + "行数据")
-      System.out.println("已经截至交的作业表插入了" + count6.length + "行数据")
-      System.out.println("预设人数成功了插入了了" + count7.length + "行数据")
-      System.out.println("上交人数成功了插入了了" + count8.length + "行数据")
+//      System.out.println("云作业成功了插入了了" + count2.length + "行数据")
+//      System.out.println("题舟成功了插入了了" + count3.length + "行数据")
+//      System.out.println("云课堂成功了插入了了" + count4.length + "行数据")
+//      System.out.println("work表了插入了了" + count5.length + "行数据")
+//      System.out.println("已经截至交的作业表插入了" + count6.length + "行数据")
+//      System.out.println("预设人数成功了插入了了" + count7.length + "行数据")
+//      System.out.println("上交人数成功了插入了了" + count8.length + "行数据")
 
       //conn.commit
     }

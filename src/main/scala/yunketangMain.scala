@@ -100,7 +100,7 @@ object yunketangMain extends Constants{
 
     // .print()
 
-    env.execute("yunketang")
+    env.execute("yunketang_2")
   }
 
 
@@ -115,7 +115,7 @@ class ByWindow2() extends AllWindowFunction[JSONObject, Iterable[JSONObject], Ti
 
 
     if(input.nonEmpty) {
-           System.out.println("通道内数据1秒内收集到 接口的条数是：" + input.size)
+          // System.out.println("通道内数据1秒内收集到 接口的条数是：" + input.size)
           out.collect(input)
         }
   }
@@ -163,7 +163,7 @@ class MySqlSink7() extends RichSinkFunction[Iterable[JSONObject]] with Constants
       updateMax = conn.prepareStatement("UPDATE all_yunketang_real set max_count=pre_count where room_id=?")
       updateStatusInfo = conn.prepareStatement("UPDATE all_yunketang_real set `status`=?,statusUptime1to2=?,statusUphour1to2=? where room_id=?")
       updateStatus1Info = conn.prepareStatement("UPDATE all_yunketang_real set `status`=?,max_count=0,statusUptime2to3=?,statusUphour2to3=? where room_id=?")
-      insertClassHistory = conn.prepareStatement("INSERT INTO all_yunketang_history (class_id, class_name, subject_id, subject_name, uptime, cur_hour, cur_day,count,school_id,school_name,province,city) VALUES (?,?,?,?,?,?,?,?,?,?,?,?)")
+      insertClassHistory = conn.prepareStatement("INSERT INTO all_yunketang_history (class_id, class_name, subject_id, subject_name, uptime, cur_hour, cur_day,count,school_id,school_name,province,city,county) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)")
     }
     catch {
       case e: Exception => {
@@ -199,7 +199,7 @@ class MySqlSink7() extends RichSinkFunction[Iterable[JSONObject]] with Constants
         online=1
 
 
-          val qusubjectInfo = "select room_id,pre_count,online_count,status,max_count ,room_name,subject_id,subject_name,school_id,school_name,province,city from all_yunketang_real where room_id= '"+class_id+"'"
+          val qusubjectInfo = "select room_id,pre_count,online_count,status,max_count ,room_name,subject_id,subject_name,school_id,school_name,province,city,county from all_yunketang_real where room_id= '"+class_id+"'"
           val results1: ResultSet = MysqlUtils2.select(qusubjectInfo)
           while (results1.next()) {
             val room_id = results1.getString(1)
@@ -214,8 +214,7 @@ class MySqlSink7() extends RichSinkFunction[Iterable[JSONObject]] with Constants
             val school_name =results1.getString(10)
             val province =results1.getString(11)
             val city =results1.getString(12)
-
-
+            val county =results1.getString(13)
             if(max_num1>pre_count){
               //将最大数据改为预设人数
               updateMax.setString(1,class_id)
@@ -255,13 +254,13 @@ class MySqlSink7() extends RichSinkFunction[Iterable[JSONObject]] with Constants
               insertClassHistory.setInt(6, status2to3.split(" ")(1).split(":")(0).toInt)
               insertClassHistory.setString(7, status2to3.split(" ")(0))
               //维度信息
-              if(max_num1<pre_count) aa=max_num1
-              else aa=pre_count
-              insertClassHistory.setInt(8,aa)
+              //aa=pre_count
+              insertClassHistory.setInt(8,pre_count)
               insertClassHistory.setInt(9,school_id)
               insertClassHistory.setString(10,school_name)
               insertClassHistory.setString(11,province)
               insertClassHistory.setString(12, city)
+              insertClassHistory.setString(13, county)
               insertClassHistory.execute()
               //conn.commit()
             }
